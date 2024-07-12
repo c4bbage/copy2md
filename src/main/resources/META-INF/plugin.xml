@@ -24,7 +24,7 @@
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <actions>
-        <action id="CopyFileAsMarkdown" class="bf.com.copy2md.CopyFileAsMarkdownAction" text="Copy File(s) as Markdown" description="Copy selected file(s) as Markdown to clipboard">
+        <action id="CopyFileAsMarkdown" class="bf.com.copy2md.CopyFileAsMarkdownAction" text="Copy File(S) as Markdown" description="Copy selected file(s) as Markdown to clipboard">
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
         </action>
         <action id="CopyCodeAsMarkdown" class="bf.com.copy2md.CopyCodeAsMarkdownAction" text="Copy Code as Markdown" description="Copy selected code as Markdown to clipboard">
