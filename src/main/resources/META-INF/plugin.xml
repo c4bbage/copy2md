@@ -1,0 +1,43 @@
+<!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
+<idea-plugin>
+    <!-- Unique identifier of the plugin. It should be FQN. It cannot be changed between the plugin versions. -->
+    <id>com.bf.copy2md</id>
+
+    <!-- Public plugin name should be written in Title Case.
+         Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-name -->
+    <name>Copy2md</name>
+
+    <!-- A displayed Vendor name or Organization ID displayed on the Plugins Page. -->
+    <vendor email="support@dobest1.com" url="https://www.dobest1.com">dobest1</vendor>
+
+    <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
+         Simple HTML elements (text formatting, paragraphs, and lists) can be added inside of <![CDATA[ ]]> tag.
+         Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-description -->
+    <description><![CDATA[
+    This plugin adds right-click menu options to copy files or selected code as Markdown to the clipboard.
+    ]]></description>
+
+    <!-- Product and plugin compatibility requirements.
+         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
+    <depends>com.intellij.modules.platform</depends>
+
+    <!-- Extension points defined by the plugin.
+         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
+    <actions>
+        <action id="CopyFileAsMarkdown" class="bf.com.copy2md.CopyFileAsMarkdownAction" text="Copy File(s) as Markdown" description="Copy selected file(s) as Markdown to clipboard">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+        <action id="CopyCodeAsMarkdown" class="bf.com.copy2md.CopyCodeAsMarkdownAction" text="Copy Code as Markdown" description="Copy selected code as Markdown to clipboard">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+        <action id="CopyAllOpenedTabsAsMarkdown" class="bf.com.copy2md.CopyAllOpenedTabsAsMarkdownAction"
+                text="Copy All Opened Tabs as Markdown"
+                description="Copy all opened tabs' files as Markdown to clipboard">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+    </actions>
+    <extensions defaultExtensionNs="com.intellij">
+
+    </extensions>
+</idea-plugin>
