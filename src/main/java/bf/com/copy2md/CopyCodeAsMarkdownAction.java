@@ -29,6 +29,8 @@ public class CopyCodeAsMarkdownAction extends AnAction {
 
         StringBuilder markdownBuilder = new StringBuilder();
         markdownBuilder.append("\n"); // 添加一个空行
+        // add project name
+        markdownBuilder.append("# Project Name: ").append(project.getName()).append("\n\n");
         markdownBuilder.append("## File: ").append(relativePath).append("\n\n");
         markdownBuilder.append("```").append(fileExtension).append("\n");
         markdownBuilder.append(selectedText).append("\n");

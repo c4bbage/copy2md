@@ -24,6 +24,7 @@ public class CopyFileAsMarkdownAction extends AnAction {
         if (files == null || files.length == 0) return;
 
         StringBuilder markdown = new StringBuilder();
+        markdown.append("Project Name: ").append(project.getName()).append("\n\n");
         for (VirtualFile file : files) {
             try {
                 if (isImageFile(file)) {

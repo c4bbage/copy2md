@@ -32,7 +32,7 @@ class CopyAllOpenedTabsAsMarkdownAction extends AnAction {
 
         // 创建一个StringBuilder来存储所有文件的Markdown内容
         StringBuilder allFilesMarkdown = new StringBuilder();
-
+        allFilesMarkdown.append("Project Name: ").append(project.getName()).append("\n\n");
         // 遍历所有打开的文件
         for (VirtualFile file : allOpenFiles) {
             // 使用CopyFileAsMarkdownAction来获取每个文件的Markdown内容
