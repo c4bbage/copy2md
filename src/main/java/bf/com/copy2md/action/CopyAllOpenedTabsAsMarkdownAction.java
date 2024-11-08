@@ -1,5 +1,6 @@
-package bf.com.copy2md;
+package bf.com.copy2md.action;
 
+import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.fileEditor.FileEditorManager;
@@ -12,12 +13,15 @@ import java.awt.datatransfer.StringSelection;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
-import static bf.com.copy2md.CopyCodeAsMarkdownAction.getRelativePath;
-import static bf.com.copy2md.CopyFileAsMarkdownAction.escapeMarkdown;
-import static bf.com.copy2md.CopyFileAsMarkdownAction.isImageFile;
+import static bf.com.copy2md.action.CopyCodeAsMarkdownAction.getRelativePath;
+import static bf.com.copy2md.action.CopyFileAsMarkdownAction.escapeMarkdown;
+import static bf.com.copy2md.action.CopyFileAsMarkdownAction.isImageFile;
 
 class CopyAllOpenedTabsAsMarkdownAction extends AnAction {
-
+    @Override
+    public @NotNull ActionUpdateThread getActionUpdateThread() {
+        return ActionUpdateThread.EDT;
+    }
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
         Project project = e.getProject();

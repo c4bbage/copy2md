@@ -1,5 +1,6 @@
-package bf.com.copy2md;
+package bf.com.copy2md.action;
 
+import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
@@ -14,7 +15,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 public class CopyCodeAsMarkdownAction extends AnAction {
-
+    @Override
+    public @NotNull ActionUpdateThread getActionUpdateThread() {
+        return ActionUpdateThread.EDT;
+    }
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
         Editor editor = e.getRequiredData(CommonDataKeys.EDITOR);
@@ -45,7 +49,10 @@ public class CopyCodeAsMarkdownAction extends AnAction {
     @Override
     public void update(@NotNull AnActionEvent e) {
         Editor editor = e.getData(CommonDataKeys.EDITOR);
-        e.getPresentation().setVisible(editor != null && editor.getSelectionModel().hasSelection());
+        boolean hasSelection = editor != null && editor.getSelectionModel().hasSelection();
+        // 设置为 enabled 而不仅仅是 visible
+        e.getPresentation().setEnabled(hasSelection);
+        e.getPresentation().setVisible(true);
     }
 
     public static String getRelativePath(Project project, VirtualFile file) {

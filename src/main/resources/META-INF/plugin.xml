@@ -20,24 +20,48 @@
     <!-- Product and plugin compatibility requirements.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
     <depends>com.intellij.modules.platform</depends>
-
+    <depends>com.intellij.modules.java</depends>
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <actions>
-        <action id="CopyFileAsMarkdown" class="bf.com.copy2md.CopyFileAsMarkdownAction" text="Copy File(S) as Markdown" description="Copy selected file(s) as Markdown to clipboard">
+        <action id="bf.com.copy2md.action.CopyFileAsMarkdown"
+                class="bf.com.copy2md.action.CopyFileAsMarkdownAction"
+                text="Copy File(S) as Markdown"
+                description="Copy selected file(s) as Markdown to clipboard">
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="EditorTabPopupMenu" anchor="last"/>
         </action>
-        <action id="CopyCodeAsMarkdown" class="bf.com.copy2md.CopyCodeAsMarkdownAction" text="Copy Code as Markdown" description="Copy selected code as Markdown to clipboard">
+
+        <action id="bf.com.copy2md.action.CopyCodeAsMarkdown"
+                class="bf.com.copy2md.action.CopyCodeAsMarkdownAction"
+                text="Copy Code as Markdown"
+                description="Copy selected code as Markdown to clipboard">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
-        <action id="CopyAllOpenedTabsAsMarkdown" class="bf.com.copy2md.CopyAllOpenedTabsAsMarkdownAction"
+
+        <action id="bf.com.copy2md.action.CopyAllOpenedTabsAsMarkdown"
+                class="bf.com.copy2md.action.CopyAllOpenedTabsAsMarkdownAction"
                 text="Copy All Opened Tabs as Markdown"
                 description="Copy all opened tabs' files as Markdown to clipboard">
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
+
+        <action id="bf.com.copy2md.action.ExtractFunctionContext"
+                class="bf.com.copy2md.action.ExtractFunctionContextAction"
+                text="Extract Function Context"
+                description="Extract function and its dependencies to markdown">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt E"/>
+        </action>
     </actions>
     <extensions defaultExtensionNs="com.intellij">
-
+        <!-- 其他扩展点 -->
+        <notificationGroup id="Copy2MD Notifications"
+                           displayType="BALLOON"
+                           key="notification.group.copy2md"/>
+        <projectService serviceImplementation="bf.com.copy2md.service.FunctionAnalyzerService"/>
+        <projectService serviceImplementation="bf.com.copy2md.service.CodeExtractionService"/>
     </extensions>
 </idea-plugin>

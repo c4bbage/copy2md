@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.bf"
-version = "1.1"
+version = "1.2.2"
 
 repositories {
     mavenCentral()
@@ -16,8 +16,9 @@ repositories {
 intellij {
     version.set("2023.2.6")
     type.set("IC") // Target IDE Platform
-
     plugins.set(listOf(/* Plugin Dependencies */))
+    plugins.set(listOf("com.intellij.java"))
+
 }
 sourceSets {
     main {
