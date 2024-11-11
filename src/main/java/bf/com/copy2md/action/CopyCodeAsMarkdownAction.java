@@ -9,12 +9,17 @@ import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.NotNull;
-
+import bf.com.copy2md.formatter.MarkdownFormatter;
+import bf.com.copy2md.util.CopyUtil;
 import java.awt.datatransfer.StringSelection;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
 public class CopyCodeAsMarkdownAction extends AnAction {
+    private final MarkdownFormatter formatter = new MarkdownFormatter();
+
     @Override
     public @NotNull ActionUpdateThread getActionUpdateThread() {
         return ActionUpdateThread.EDT;
@@ -28,21 +33,20 @@ public class CopyCodeAsMarkdownAction extends AnAction {
         VirtualFile virtualFile = e.getRequiredData(CommonDataKeys.VIRTUAL_FILE);
         Project project = e.getRequiredData(CommonDataKeys.PROJECT);
 
-        String relativePath = getRelativePath(project, virtualFile);
-        String fileExtension = virtualFile.getExtension();
-
         StringBuilder markdownBuilder = new StringBuilder();
         markdownBuilder.append("\n"); // 添加一个空行
         // add project name
-        markdownBuilder.append("# Project Name: ").append(project.getName()).append("\n\n");
-        markdownBuilder.append("## File: ").append(relativePath).append("\n\n");
-        markdownBuilder.append("```").append(fileExtension).append("\n");
-        markdownBuilder.append(selectedText).append("\n");
-        markdownBuilder.append("```");
+        String content = null;
+        try {
+            content = new String(virtualFile.contentsToByteArray(), StandardCharsets.UTF_8);
 
-        String markdown = markdownBuilder.toString();
+            markdownBuilder.append("# Project Name: ").append(project.getName()).append("\n\n");
+            markdownBuilder.append(formatter.formatFileContent(project, virtualFile, content));
+        } catch (IOException ex) {
+            throw new RuntimeException(ex);
+        }
 
-        CopyPasteManager.getInstance().setContents(new StringSelection(markdown));
+        CopyUtil.copyToClipboardWithNotification(markdownBuilder.toString(), project);
     }
 
 
@@ -55,16 +59,4 @@ public class CopyCodeAsMarkdownAction extends AnAction {
         e.getPresentation().setVisible(true);
     }
 
-    public static String getRelativePath(Project project, VirtualFile file) {
-        VirtualFile projectDir = project.getBaseDir();
-        if (projectDir == null) {
-            return file.getPath();
-        }
-
-        Path projectPath = Paths.get(projectDir.getPath());
-        Path filePath = Paths.get(file.getPath());
-
-        Path relativePath = projectPath.relativize(filePath);
-        return relativePath.toString().replace('\\', '/');
-    }
 }

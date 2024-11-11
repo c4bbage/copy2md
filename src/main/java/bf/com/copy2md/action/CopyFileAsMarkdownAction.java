@@ -1,5 +1,7 @@
 package bf.com.copy2md.action;
+import bf.com.copy2md.formatter.MarkdownFormatter;
 
+import bf.com.copy2md.util.CopyUtil;
 import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -20,6 +22,8 @@ public class CopyFileAsMarkdownAction extends AnAction {
     public @NotNull ActionUpdateThread getActionUpdateThread() {
         return ActionUpdateThread.EDT;
     }
+    private final MarkdownFormatter formatter = new MarkdownFormatter();
+
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
         @NotNull Project project = e.getRequiredData(CommonDataKeys.PROJECT);
@@ -31,45 +35,14 @@ public class CopyFileAsMarkdownAction extends AnAction {
         markdown.append("Project Name: ").append(project.getName()).append("\n\n");
         for (VirtualFile file : files) {
             try {
-                if (isImageFile(file)) {
-                    String safeFileName = escapeMarkdown(file.getName());
-                    markdown.append("![Image: ").append(safeFileName).append("](")
-                            .append(getRelativePath(project,file)).append(")\n\n");
-                    continue;
-                }
                 String content = new String(file.contentsToByteArray(), StandardCharsets.UTF_8);
-                markdown.append("## File: ").append(getRelativePath(project,file)).append("\n\n");
-                markdown.append("```").append(file.getExtension()).append("\n");
-                markdown.append(content).append("\n");
-                markdown.append("```\n\n");
+                markdown.append(formatter.formatFileContent(project, file, content));
             } catch (IOException ioException) {
                 ioException.printStackTrace();
             }
         }
 
-        CopyPasteManager.getInstance().setContents(new StringSelection(markdown.toString()));
-    }
-    // 辅助方法
-    public static  boolean isImageFile(VirtualFile file) {
-        String extension = file.getExtension();
-        if (extension == null) return false;
-        return Arrays.asList("png", "jpg", "jpeg", "gif", "bmp")
-                .contains(extension.toLowerCase());
+        CopyUtil.copyToClipboardWithNotification(markdown.toString(), project);
     }
 
-    public static String escapeMarkdown(String text) {
-        return text.replaceAll("([\\[\\]()\\\\])", "\\\\$1");
-    }
-    public static String getRelativePath(Project project, VirtualFile file) {
-        VirtualFile projectDir = project.getBaseDir();
-        if (projectDir == null) {
-            return file.getPath();
-        }
-
-        Path projectPath = Paths.get(projectDir.getPath());
-        Path filePath = Paths.get(file.getPath());
-
-        Path relativePath = projectPath.relativize(filePath);
-        return relativePath.toString().replace('\\', '/');
-    }
 }

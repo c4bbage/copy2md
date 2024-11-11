@@ -12,12 +12,12 @@ import org.jetbrains.annotations.NotNull;
 import java.awt.datatransfer.StringSelection;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-
-import static bf.com.copy2md.action.CopyCodeAsMarkdownAction.getRelativePath;
-import static bf.com.copy2md.action.CopyFileAsMarkdownAction.escapeMarkdown;
-import static bf.com.copy2md.action.CopyFileAsMarkdownAction.isImageFile;
+import bf.com.copy2md.formatter.MarkdownFormatter;
+import bf.com.copy2md.util.CopyUtil;
 
 class CopyAllOpenedTabsAsMarkdownAction extends AnAction {
+    private final MarkdownFormatter formatter = new MarkdownFormatter();
+
     @Override
     public @NotNull ActionUpdateThread getActionUpdateThread() {
         return ActionUpdateThread.EDT;
@@ -39,19 +39,10 @@ class CopyAllOpenedTabsAsMarkdownAction extends AnAction {
         allFilesMarkdown.append("Project Name: ").append(project.getName()).append("\n\n");
         // 遍历所有打开的文件
         for (VirtualFile file : allOpenFiles) {
-            // 使用CopyFileAsMarkdownAction来获取每个文件的Markdown内容
             try {
-                if (isImageFile(file)) {
-                    String safeFileName = escapeMarkdown(file.getName());
-                    allFilesMarkdown.append("![Image: ").append(safeFileName).append("](")
-                            .append(getRelativePath(project,file)).append(")\n\n");
-                    continue;
-                }
-                String content = new String(file.contentsToByteArray(), StandardCharsets.UTF_8);
-                allFilesMarkdown.append("## File: ").append(getRelativePath(project,file)).append("\n\n");
-                allFilesMarkdown.append("```").append(file.getExtension()).append("\n");
-                allFilesMarkdown.append(content).append("\n");
-                allFilesMarkdown.append("```\n\n");
+                    String content = new String(file.contentsToByteArray(), StandardCharsets.UTF_8);
+                    allFilesMarkdown.append(formatter.formatFileContent(project, file, content));
+
             } catch (IOException ioException) {
                 ioException.printStackTrace();
             }
@@ -59,6 +50,6 @@ class CopyAllOpenedTabsAsMarkdownAction extends AnAction {
         }
 
         // 将所有文件的Markdown内容复制到剪贴板
-        CopyPasteManager.getInstance().setContents(new StringSelection(allFilesMarkdown.toString()));
+        CopyUtil.copyToClipboardWithNotification(allFilesMarkdown.toString(), project);
     }
 }
