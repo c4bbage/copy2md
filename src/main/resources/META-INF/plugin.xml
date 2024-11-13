@@ -20,7 +20,8 @@
     <!-- Product and plugin compatibility requirements.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
     <depends>com.intellij.modules.platform</depends>
-    <depends>com.intellij.modules.java</depends>
+    <depends optional="true" config-file="">com.intellij.modules.java</depends>
+<!--    <depends>com.intellij.modules.python</depends>-->
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <actions>
@@ -61,7 +62,5 @@
         <notificationGroup id="Copy2MD Notifications"
                            displayType="BALLOON"
                            key="notification.group.copy2md"/>
-        <projectService serviceImplementation="bf.com.copy2md.service.FunctionAnalyzerService"/>
-        <projectService serviceImplementation="bf.com.copy2md.service.CodeExtractionService"/>
     </extensions>
 </idea-plugin>
