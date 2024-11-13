@@ -1,23 +1,23 @@
 package bf.com.copy2md.action;
 
-import bf.com.copy2md.analysis.FunctionCallAnalyzer;
-//import bf.com.copy2md.analysis.impl.JavaFunctionCallAnalyzer;
-//import bf.com.copy2md.analysis.impl.PythonFunctionCallAnalyzer;
+import bf.com.copy2md.analysis.impl.GoFunctionCallAnalyzer;
 import bf.com.copy2md.analysis.impl.JavaFunctionCallAnalyzer;
-import bf.com.copy2md.model.ExtractionConfig;
-import bf.com.copy2md.model.FunctionContext;
-import bf.com.copy2md.util.NotificationUtil;
-import com.intellij.lang.java.JavaLanguage;
+import bf.com.copy2md.analysis.impl.PythonFunctionCallAnalyzer;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.project.Project;
-import com.intellij.psi.*;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiMethod;
 import com.intellij.psi.util.PsiTreeUtil;
+import bf.com.copy2md.analysis.FunctionCallAnalyzer;
+import bf.com.copy2md.model.FunctionContext;
+import bf.com.copy2md.model.ExtractionConfig;
+import bf.com.copy2md.util.NotificationUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.awt.datatransfer.StringSelection;
-import java.util.List;
 import java.util.Set;
 
 public class ExtractFunctionContextAction extends AnAction {
@@ -30,47 +30,79 @@ public class ExtractFunctionContextAction extends AnAction {
 
         try {
             PsiElement element = psiFile.findElementAt(editor.getCaretModel().getOffset());
-            PsiMethod method = PsiTreeUtil.getParentOfType(element, PsiMethod.class);
 
-            if (method != null) {
-                ExtractionConfig config = ExtractionConfig.builder()
-                        .includeComments(false)
-                        .includeImports(true)
-                        .maxDepth(1)
-                        .build();
+            // 获取当前语言ID
+            String languageId = psiFile.getLanguage().getID().toLowerCase();
 
-                FunctionCallAnalyzer analyzer = new JavaFunctionCallAnalyzer(project, config);
-                Set<FunctionContext> contexts = analyzer.analyzeFunctionCalls(method);
+            // 构建配置
+            ExtractionConfig config = ExtractionConfig.builder()
+                    .includeComments(false)
+                    .includeImports(true)
+                    .maxDepth(1)
+                    .build();
 
+            // 获取对应的分析器
+            FunctionCallAnalyzer analyzer = FunctionAnalyzerFactory.createAnalyzer(
+                    languageId, project, config);
+
+            if (analyzer == null) {
+                NotificationUtil.showError(project, "Unsupported language: " + languageId);
+                return;
+            }
+
+            // 根据语言类型获取合适的上下文元素
+            PsiElement contextElement = getContextElement(element, languageId);
+
+            if (contextElement != null) {
+                Set<FunctionContext> contexts = analyzer.analyzeFunctionCalls(contextElement);
                 String markdown = new bf.com.copy2md.formatter.MarkdownFormatter().format(contexts);
                 CopyPasteManager.getInstance().setContents(new StringSelection(markdown));
-
                 NotificationUtil.showInfo(project, "Code context copied to clipboard!");
+            } else {
+                NotificationUtil.showError(project, "No valid function context found at cursor position");
             }
         } catch (Exception ex) {
             NotificationUtil.showError(project, "Error extracting code context: " + ex.getMessage());
         }
-        //// Python示例
-        //        PsiFile psiFile = e.getData(CommonDataKeys.PSI_FILE);
-        //        if (psiFile != null) {
-        //            PythonFunctionCallAnalyzer analyzer = new PythonFunctionCallAnalyzer(psiFile);
-        //            List<PythonFunctionCallAnalyzer.FunctionInfo> functions = analyzer.analyze();
-        //            for (PythonFunctionCallAnalyzer.FunctionInfo function : functions) {
-        //                String markdown = analyzer.convertToMarkdown(function);
-        //                // 处理markdown输出...
-        //            }
-        //        }
-        //
-        //// Go示例
-        //        GoFile goFile = e.getData(CommonDataKeys.PSI_FILE);
-        //        if (goFile != null) {
-        //            GoFunctionCallAnalyzer analyzer = new GoFunctionCallAnalyzer(goFile);
-        //            List<GoFunctionInfo> functions = analyzer.analyze();
-        //            for (GoFunctionInfo function : functions) {
-        //                String markdown = analyzer.convertToMarkdown(function);
-        //                // 处理markdown输出...
-        //            }
-        //        }
+    }
+
+    private PsiElement getContextElement(PsiElement element, String languageId) {
+        switch (languageId) {
+            case "java":
+                return PsiTreeUtil.getParentOfType(element, PsiMethod.class);
+            case "python":
+                // 查找Python函数定义
+                return findPythonFunction(element);
+            case "go":
+                // 查找Go函数定义
+                return findGoFunction(element);
+            default:
+                return null;
+        }
+    }
+
+    private PsiElement findPythonFunction(PsiElement element) {
+        // 简单的Python函数查找逻辑
+        PsiElement parent = element.getParent();
+        while (parent != null) {
+            if (parent.getText().startsWith("def ")) {
+                return parent;
+            }
+            parent = parent.getParent();
+        }
+        return null;
+    }
+
+    private PsiElement findGoFunction(PsiElement element) {
+        // 简单的Go函数查找逻辑
+        PsiElement parent = element.getParent();
+        while (parent != null) {
+            if (parent.getText().startsWith("func ")) {
+                return parent;
+            }
+            parent = parent.getParent();
+        }
+        return null;
     }
 
     @Override
@@ -78,10 +110,32 @@ public class ExtractFunctionContextAction extends AnAction {
         Editor editor = e.getData(CommonDataKeys.EDITOR);
         PsiFile psiFile = e.getData(CommonDataKeys.PSI_FILE);
 
-        e.getPresentation().setEnabledAndVisible(
-                editor != null &&
-                        psiFile != null &&
-                        psiFile.getLanguage().is(JavaLanguage.INSTANCE)
-        );
+        boolean enabled = false;
+        if (editor != null && psiFile != null) {
+            String languageId = psiFile.getLanguage().getID().toLowerCase();
+            // 支持的语言列表
+            enabled = "java".equals(languageId) ||
+                    "python".equals(languageId) ||
+                    "go".equals(languageId);
+        }
+
+        e.getPresentation().setEnabledAndVisible(enabled);
+    }
+}
+
+// 分析器工厂类
+class FunctionAnalyzerFactory {
+    public static FunctionCallAnalyzer createAnalyzer(
+            String languageId, Project project, ExtractionConfig config) {
+        switch (languageId) {
+            case "java":
+                return new JavaFunctionCallAnalyzer(project, config);
+            case "python":
+                return new PythonFunctionCallAnalyzer(project, config);
+            case "go":
+                return new GoFunctionCallAnalyzer(project, config);
+            default:
+                return null;
+        }
     }
 }
