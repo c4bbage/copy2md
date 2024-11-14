@@ -65,6 +65,47 @@ public class ExtractFunctionContextAction extends AnAction {
             NotificationUtil.showError(project, "Error extracting code context: " + ex.getMessage());
         }
     }
+    private PsiElement findPythonFunction(PsiElement element) {
+        PsiElement current = element;
+        while (current != null) {
+            // 检查是否是函数定义
+            if (isPythonFunctionOrMethod(current)) {
+                return current;
+            }
+            current = current.getParent();
+        }
+        return null;
+    }
+    private boolean isPythonFunctionOrMethod(PsiElement element) {
+        if (element == null) return false;
+
+        String text = element.getText().trim();
+        if (text.startsWith("def ") || text.matches("\\s*def\\s+.*")) {
+            // 检查是否是类方法
+            PsiElement parent = element.getParent();
+            while (parent != null) {
+                if (isPythonClass(parent)) {
+                    return true; // 是类方法
+                }
+                if (parent instanceof PsiFile) {
+                    return true; // 是普通函数
+                }
+                parent = parent.getParent();
+            }
+            return true; // 其他情况也返回true
+        }
+        return false;
+    }
+
+    private boolean isPythonClass(PsiElement element) {
+        String text = element.getText().trim();
+        return text.startsWith("class ") || text.matches("\\s*class\\s+.*");
+    }
+    private boolean isPythonFunction(PsiElement element) {
+        String text = element.getText();
+        return text != null && (text.startsWith("def ") ||
+                text.matches("\\s*def\\s+.*")); // Handle indented methods
+    }
 
     private PsiElement getContextElement(PsiElement element, String languageId) {
         switch (languageId) {
@@ -79,18 +120,6 @@ public class ExtractFunctionContextAction extends AnAction {
             default:
                 return null;
         }
-    }
-
-    private PsiElement findPythonFunction(PsiElement element) {
-        // 简单的Python函数查找逻辑
-        PsiElement parent = element.getParent();
-        while (parent != null) {
-            if (parent.getText().startsWith("def ")) {
-                return parent;
-            }
-            parent = parent.getParent();
-        }
-        return null;
     }
 
     private PsiElement findGoFunction(PsiElement element) {
