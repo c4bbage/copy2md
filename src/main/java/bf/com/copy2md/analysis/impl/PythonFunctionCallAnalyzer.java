@@ -57,7 +57,44 @@ public class PythonFunctionCallAnalyzer implements FunctionCallAnalyzer {
         }
         return contexts;
     }
+    private void collectPythonFiles(VirtualFile dir, List<VirtualFile> pythonFiles) {
+        for (VirtualFile file : dir.getChildren()) {
+            if (file.isDirectory()) {
+                // 排除虚拟环境和缓存目录
+                String name = file.getName();
+                if (!name.equals("venv") && !name.equals("__pycache__") && !name.startsWith(".")) {
+                    collectPythonFiles(file, pythonFiles);
+                }
+            } else if ("py".equals(file.getExtension())) {
+                pythonFiles.add(file);
+            }
+        }
+    }
+    private Collection<VirtualFile> findProjectPythonFiles(Project project) {
+        List<VirtualFile> pythonFiles = new ArrayList<>();
+        VirtualFile baseDir = project.getBaseDir();
+        if (baseDir != null) {
+            collectPythonFiles(baseDir, pythonFiles);
+        }
+        return pythonFiles;
+    }
 
+    private void initializeAllClassContexts(PsiElement element) {
+        // 初始化当前文件
+        initializeClassContexts(element.getContainingFile());
+
+        // 获取项目中所有相关Python文件
+        Project project = element.getProject();
+        Collection<VirtualFile> pythonFiles = findProjectPythonFiles(project);
+
+        // 初始化所有文件的类上下文
+        for (VirtualFile file : pythonFiles) {
+            PsiFile psiFile = PsiManager.getInstance(project).findFile(file);
+            if (psiFile != null) {
+                initializeClassContexts(psiFile);
+            }
+        }
+    }
     // 修改原有的analyzeFunctionCalls方法名称，避免冲突
     private void analyzeFunctionCallsInternal(PsiElement function, Set<FunctionContext> contexts, int depth, ClassContext classContext) {
         function.acceptChildren(new PsiElementVisitor() {
@@ -78,17 +115,27 @@ public class PythonFunctionCallAnalyzer implements FunctionCallAnalyzer {
             @Override
             public void visitElement(@NotNull PsiElement element) {
                 if (isPythonClass(element)) {
-                    String className = extractClassName(element);
-                    ClassContext classContext = new ClassContext(className, element);
-                    // 收集类中的所有方法
-                    collectClassMethods(element, classContext);
-                    classContextMap.put(className, classContext);
+                    processClassDefinition(element);
                 }
                 super.visitElement(element);
             }
         });
     }
 
+    private void processClassDefinition(PsiElement classElement) {
+        String className = extractClassName(classElement);
+        ClassContext context = new ClassContext(className, classElement);
+
+        // 收集所有方法，包括装饰器方法
+        for (PsiElement child : classElement.getChildren()) {
+            if (isPythonFunctionOrMethod(child)) {
+                String methodName = extractFunctionName(child);
+                context.methods.put(methodName, child);
+            }
+        }
+
+        classContextMap.put(className, context);
+    }
     private void collectClassMethods(PsiElement classElement, ClassContext context) {
         classElement.accept(new PsiRecursiveElementVisitor() {
             @Override
@@ -103,21 +150,42 @@ public class PythonFunctionCallAnalyzer implements FunctionCallAnalyzer {
     }
 
     private ClassContext getClassContext(PsiElement element) {
+        List<ClassContext> classStack = new ArrayList<>();
         PsiElement current = element;
+
         while (current != null) {
             if (isPythonClass(current)) {
                 String className = extractClassName(current);
-                return classContextMap.get(className);
+                ClassContext context = classContextMap.get(className);
+                if (context != null) {
+                    classStack.add(0, context);
+                }
             }
             current = current.getParent();
         }
-        return null;
+
+        // 返回最近的类上下文
+        return classStack.isEmpty() ? null : classStack.get(0);
     }
 
     private boolean isPythonFunctionOrMethod(PsiElement element) {
         if (element == null) return false;
+
         String text = element.getText().trim();
-        return text.startsWith("def ") || text.matches("\\s*def\\s+.*");
+        // 检查装饰器
+        PsiElement prevSibling = element.getPrevSibling();
+        while (prevSibling != null) {
+            String siblingText = prevSibling.getText().trim();
+            if (siblingText.startsWith("@")) {
+                // 包含装饰器的情况
+                text = siblingText + "\n" + text;
+            }
+            prevSibling = prevSibling.getPrevSibling();
+        }
+
+        // 检查函数定义
+        return text.contains("def ") || text.matches("\\s*async\\s+def\\s+.*")
+                || text.matches("\\s*def\\s+.*");
     }
 
     private boolean isPythonClass(PsiElement element) {
@@ -132,6 +200,9 @@ public class PythonFunctionCallAnalyzer implements FunctionCallAnalyzer {
         int endIndex = text.indexOf("(");
         if (endIndex == -1) {
             endIndex = text.indexOf(":");
+        }
+        if (endIndex == -1) {
+            endIndex = text.length();
         }
         return text.substring(startIndex, endIndex).trim();
     }
@@ -275,11 +346,80 @@ public class PythonFunctionCallAnalyzer implements FunctionCallAnalyzer {
             contexts.add(context);
 
             if (shouldAnalyzeDeeper(depth)) {
-                analyzeFunctionCallsInternal(function, contexts, depth, classContext);
+//                analyzeFunctionCallsInternal(function, contexts, depth, classContext);
+                analyzeMethodCalls(function, contexts, depth + 1, classContext, context);
             }
         }
     }
+    private void analyzeMethodCalls(PsiElement function, Set<FunctionContext> contexts,
+                                    int depth, ClassContext classContext,
+                                    FunctionContext parentContext) {
+        if (depth > config.getMaxDepth()) return;
 
+        function.accept(new PsiRecursiveElementVisitor() {
+            @Override
+            public void visitElement(@NotNull PsiElement element) {
+                if (isPythonFunctionCall(element)) {
+                    // 处理 self 调用
+                    if (isClassMethodCall(element, classContext)) {
+                        String methodName = extractMethodName(element);
+                        PsiElement method = classContext.methods.get(methodName);
+                        if (method != null) {
+                            processFunctionCall(method, contexts, depth + 1,
+                                    classContext, parentContext);
+                        }
+                    } else {
+                        PsiElement calledFunction = resolveFunction(element);
+                        if (calledFunction != null) {
+                            processFunctionCall(calledFunction, contexts,
+                                    depth + 1, getClassContext(calledFunction),
+                                    parentContext);
+                        }
+                    }
+                }
+                super.visitElement(element);
+            }
+        });
+    }
+
+    private boolean isClassMethodCall(PsiElement callElement,
+                                      ClassContext classContext) {
+        if (classContext == null) return false;
+        String text = callElement.getText();
+        return text.startsWith("self.") ||
+                text.startsWith(classContext.className + ".");
+    }
+
+    private String extractMethodName(PsiElement callElement) {
+        String text = callElement.getText();
+        int dotIndex = text.indexOf(".");
+        int parenIndex = text.indexOf("(");
+        if (dotIndex >= 0 && parenIndex > dotIndex) {
+            return text.substring(dotIndex + 1, parenIndex).trim();
+        }
+        return null;
+    }
+
+    private void processFunctionCall(PsiElement function,
+                                     Set<FunctionContext> contexts,
+                                     int depth,
+                                     ClassContext classContext,
+                                     FunctionContext parentContext) {
+        String signature = getFunctionSignature(function, classContext);
+        if (processedFunctions.contains(signature)) return;
+
+        FunctionContext context = createFunctionContext(function, classContext);
+        contexts.add(context);
+        parentContext.addDependency(context);
+
+        analyzePythonFunction(function, contexts, depth, classContext);
+    }
+
+    private boolean isProcessed(PsiElement function) {
+        ClassContext classContext = getClassContext(function);
+        String signature = getFunctionSignature(function, classContext);
+        return processedFunctions.contains(signature);
+    }
     private boolean isPythonFunction(PsiElement element) {
         // 检查是否是Python函数定义
         return element.getText().startsWith("def ");
@@ -300,19 +440,35 @@ public class PythonFunctionCallAnalyzer implements FunctionCallAnalyzer {
         String filePath = function.getContainingFile().getVirtualFile().getPath();
         return filePath + "::" + signature;
     }
+    private String buildFullQualifiedName(PsiElement function, ClassContext classContext) {
+        StringBuilder name = new StringBuilder();
 
-    private FunctionContext createFunctionContext(PsiElement function, ClassContext classContext) {
-        String name = extractFunctionName(function);
+        // 添加类名前缀
         if (classContext != null) {
-            name = classContext.className + "." + name;
+            name.append(classContext.className).append(".");
         }
 
-        String fileName = function.getContainingFile().getName();
-        String sourceText = extractSourceText(function);
-        String packageName = extractPackageName(function);
-        boolean isProjectFunction = isProjectFunction(function);
+        // 添加函数名
+        name.append(extractFunctionName(function));
 
-        return new FunctionContext(function, name, fileName, sourceText, packageName, isProjectFunction);
+        return name.toString();
+    }
+    private FunctionContext createFunctionContext(PsiElement function, ClassContext classContext) {
+        // 1. 构建完整的函数名
+        String name = buildFullQualifiedName(function, classContext);
+
+        // 2. 提取完整的源代码
+        String sourceText = extractSourceText(function);
+
+        // 3. 创建上下文对象
+        return new FunctionContext(
+                function,
+                name,
+                function.getContainingFile().getName(),
+                sourceText,
+                extractPackageName(function),
+                isProjectFunction(function)
+        );
     }
 
     private boolean isRelevantFunction(PsiElement function) {
@@ -328,20 +484,83 @@ public class PythonFunctionCallAnalyzer implements FunctionCallAnalyzer {
         return true;
     }
 
-
     private String extractFunctionName(PsiElement function) {
         String functionText = function.getText();
-        int startIndex = functionText.indexOf("def ") + 4;
-        int endIndex = functionText.indexOf("(");
+        int startIndex = 0;
+
+        // 1. 处理装饰器
+        while (startIndex < functionText.length() && functionText.charAt(startIndex) == '@') {
+            startIndex = functionText.indexOf("\n", startIndex) + 1;
+        }
+
+        // 2. 处理缩进
+        int level = getIndentationLevel(functionText.substring(0, startIndex));
+        startIndex += level * 4;
+
+        // 3. async的情况
+        if (functionText.startsWith("async ", startIndex)) {
+            startIndex += 6;
+        }
+
+        // 4. def的情况
+        startIndex += 3; // skip "def "
+        int endIndex = functionText.indexOf("(", startIndex);
         return functionText.substring(startIndex, endIndex).trim();
     }
-
-    private String extractSourceText(PsiElement function) {
-        if (!config.isIncludeComments()) {
-            return removePythonComments(function.getText());
+    private int getIndentationLevel(String text) {
+        int level = 0;
+        for (char c : text.toCharArray()) {
+            if (c == ' ') level++;
+            else if (c == '\t') level += 4;
+            else break;
         }
-        return function.getText();
+        return level / 4;
     }
+    private String extractSourceText(PsiElement function) {
+        StringBuilder text = new StringBuilder();
+
+        // 1. 获取完整的函数文本范围
+        PsiElement startElement = function;
+        while (startElement.getPrevSibling() != null &&
+                startElement.getPrevSibling().getText().trim().startsWith("@")) {
+            startElement = startElement.getPrevSibling();
+        }
+
+        // 2. 获取函数的起始和结束位置
+        int startOffset = startElement.getTextRange().getStartOffset();
+        int endOffset = findFunctionEndOffset(function);
+
+        // 3. 获取原始文本
+        String originalText = function.getContainingFile().getText()
+                .substring(startOffset, endOffset);
+
+        // 4. 保持原始缩进和格式
+
+        // 5. 处理注释
+        return config.isIncludeComments() ? originalText :
+                removePythonComments(originalText);
+    }
+
+    private int findFunctionEndOffset(PsiElement function) {
+        int baseIndent = getIndentationLevel(function.getText());
+        PsiElement current = function.getNextSibling();
+
+        while (current != null) {
+            String text = current.getText();
+            if (!text.trim().isEmpty()) {
+                int currentIndent = getIndentationLevel(text);
+                if (currentIndent <= baseIndent) {
+                    break;
+                }
+            }
+            current = current.getNextSibling();
+        }
+
+        return current != null ?
+                current.getTextRange().getStartOffset() :
+                function.getTextRange().getEndOffset();
+    }
+
 
     private String extractPackageName(PsiElement function) {
         // 从__init__.py文件或目录结构推断包名
