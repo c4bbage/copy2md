@@ -4,7 +4,9 @@ import bf.com.copy2md.analysis.FunctionCallAnalyzer;
 import bf.com.copy2md.model.ExtractionConfig;
 import bf.com.copy2md.model.FunctionContext;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiTreeUtil;
@@ -240,24 +242,25 @@ public class PythonFunctionCallAnalyzer implements FunctionCallAnalyzer {
         return text.contains(".") && text.contains("(");
     }
 
-    private PsiElement resolveMethodCall(PsiElement callExpression) {
-        String text = callExpression.getText();
-        int dotIndex = text.lastIndexOf(".");
-        int parenIndex = text.indexOf("(");
-
-        if (dotIndex > 0 && parenIndex > dotIndex) {
-            String objectPart = text.substring(0, dotIndex).trim();
-            String methodName = text.substring(dotIndex + 1, parenIndex).trim();
-
-            // 查找类定义
-            for (ClassContext context : classContextMap.values()) {
-                PsiElement method = context.methods.get(methodName);
-                if (method != null) {
-                    return method;
-                }
-            }
+    private PsiElement resolveMethodCall(PsiElement call) {
+        String callText = call.getText();
+        if (callText.startsWith("self.")) {
+            // 处理self调用
+            return resolveClassMethod(call, getClassContext(call));
+        } else if (callText.contains(".")) {
+            // 处理普通方法调用
+            return resolveObjectMethod(call);
+        } else {
+            // 处理普通函数调用
+            return resolveFunction(call);
         }
-        return null;
+    }
+
+    private PsiElement resolveClassMethod(PsiElement call, ClassContext context) {
+        if (context == null) return null;
+
+        String methodName = extractMethodName(call);
+        return context.methods.get(methodName);
     }
     private PsiElement resolveLocalFunction(PsiElement element, String name) {
         // 在当前作用域中查找函数定义
@@ -351,35 +354,189 @@ public class PythonFunctionCallAnalyzer implements FunctionCallAnalyzer {
             }
         }
     }
+    /**
+     * 判断是否是Python方法调用
+     * @param element 需要判断的元素
+     * @return true表示是方法调用
+     */
+    private boolean isPythonMethodCall(PsiElement element) {
+        if (element == null) return false;
+
+        String text = element.getText().trim();
+        // 检查是否包含方法调用的特征
+        if (text.contains("(")) {
+            // 1. self调用
+            if (text.startsWith("self.")) return true;
+
+            // 2. 对象方法调用
+            if (text.contains(".") && !text.startsWith("def ")) return true;
+
+            // 3. 类方法调用 (类名.方法)
+            for (String className : classContextMap.keySet()) {
+                if (text.startsWith(className + ".")) return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * 解析对象方法调用
+     * @param call 方法调用表达式
+     * @return 解析到的方法定义元素
+     */
+    private PsiElement resolveObjectMethod(PsiElement call) {
+        String text = call.getText();
+        int dotIndex = text.lastIndexOf(".");
+        if (dotIndex <= 0) return null;
+
+        // 提取对象部分和方法名
+        String objectPart = text.substring(0, dotIndex).trim();
+        String methodName = extractMethodName(call);
+
+        // 1. 尝试解析为类方法调用
+        for (Map.Entry<String, ClassContext> entry : classContextMap.entrySet()) {
+            if (objectPart.equals(entry.getKey())) {
+                PsiElement method = entry.getValue().methods.get(methodName);
+                if (method != null) return method;
+            }
+        }
+
+        // 2. 尝试解析为导入对象的方法调用
+        List<ImportInfo> imports = collectImports(call.getContainingFile());
+        for (ImportInfo importInfo : imports) {
+            if (objectPart.equals(importInfo.importedName) ||
+                    objectPart.equals(importInfo.alias)) {
+                return resolveImportedMethod(importInfo, methodName);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 解析导入的方法
+     * @param importInfo 导入信息
+     * @param methodName 方法名
+     * @return 解析到的方法定义元素
+     */
+    private PsiElement resolveImportedMethod(ImportInfo importInfo, String methodName) {
+        VirtualFile projectRoot = project.getBaseDir();
+        if (projectRoot == null) return null;
+
+        // 构建可能的模块路径
+        String modulePath = importInfo.fromModule != null ?
+                importInfo.fromModule.replace(".", "/") :
+                importInfo.importedName.replace(".", "/");
+
+        // 尝试不同的可能路径
+        List<String> possiblePaths = Arrays.asList(
+                modulePath + ".py",
+                modulePath + "/__init__.py"
+        );
+
+        for (String path : possiblePaths) {
+            VirtualFile moduleFile = projectRoot.findFileByRelativePath(path);
+            if (moduleFile != null) {
+                PsiFile psiFile = PsiManager.getInstance(project).findFile(moduleFile);
+                if (psiFile != null) {
+                    // 查找类定义和方法
+                    ClassContext classContext = findClassInFile(psiFile, importInfo.importedName);
+                    if (classContext != null) {
+                        PsiElement method = classContext.methods.get(methodName);
+                        if (method != null) return method;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 在文件中查找类定义
+     * @param file Python文件
+     * @param className 类名
+     * @return 类上下文对象
+     */
+    private ClassContext findClassInFile(PsiFile file, String className) {
+        AtomicReference<ClassContext> result = new AtomicReference<>();
+
+        file.accept(new PsiRecursiveElementVisitor() {
+            @Override
+            public void visitElement(@NotNull PsiElement element) {
+                if (result.get() != null) return;
+
+                if (isPythonClass(element)) {
+                    String name = extractClassName(element);
+                    if (className.equals(name)) {
+                        ClassContext context = new ClassContext(name, element);
+                        collectClassMethods(element, context);
+                        result.set(context);
+                    }
+                }
+
+                super.visitElement(element);
+            }
+        });
+
+        return result.get();
+    }
+
+    /**
+     * 从方法调用中提取方法名
+     * @param call 方法调用表达式
+     * @return 方法名
+     */
+    private String extractMethodName(PsiElement call) {
+        String text = call.getText().trim();
+        int dotIndex = text.lastIndexOf(".");
+        int parenIndex = text.indexOf("(");
+
+        if (dotIndex >= 0 && parenIndex > dotIndex) {
+            return text.substring(dotIndex + 1, parenIndex).trim();
+        }
+        return null;
+    }
     private void analyzeMethodCalls(PsiElement function, Set<FunctionContext> contexts,
                                     int depth, ClassContext classContext,
                                     FunctionContext parentContext) {
+        // 防止递归过深
         if (depth > config.getMaxDepth()) return;
 
+        // 获取所有方法调用
+        Map<PsiElement, String> calls = new LinkedHashMap<>();
         function.accept(new PsiRecursiveElementVisitor() {
             @Override
             public void visitElement(@NotNull PsiElement element) {
-                if (isPythonFunctionCall(element)) {
-                    // 处理 self 调用
-                    if (isClassMethodCall(element, classContext)) {
-                        String methodName = extractMethodName(element);
-                        PsiElement method = classContext.methods.get(methodName);
-                        if (method != null) {
-                            processFunctionCall(method, contexts, depth + 1,
-                                    classContext, parentContext);
-                        }
-                    } else {
-                        PsiElement calledFunction = resolveFunction(element);
-                        if (calledFunction != null) {
-                            processFunctionCall(calledFunction, contexts,
-                                    depth + 1, getClassContext(calledFunction),
-                                    parentContext);
-                        }
+                if (isPythonMethodCall(element)) {
+                    String signature = getFunctionSignature(element, classContext);
+                    if (!processedFunctions.contains(signature)) {
+                        calls.put(element, signature);
                     }
                 }
                 super.visitElement(element);
             }
         });
+
+        // 分析每个调用
+        for (Map.Entry<PsiElement, String> entry : calls.entrySet()) {
+            PsiElement call = entry.getKey();
+            String signature = entry.getValue();
+
+            // 解析调用的函数
+            PsiElement target = resolveMethodCall(call);
+            if (target != null) {
+                FunctionContext context = createFunctionContext(target,
+                        getClassContext(target));
+                contexts.add(context);
+                parentContext.addDependency(context);
+
+                // 递归分析
+                analyzePythonFunction(target, contexts, depth + 1,
+                        getClassContext(target));
+            }
+        }
     }
 
     private boolean isClassMethodCall(PsiElement callElement,
@@ -390,15 +547,6 @@ public class PythonFunctionCallAnalyzer implements FunctionCallAnalyzer {
                 text.startsWith(classContext.className + ".");
     }
 
-    private String extractMethodName(PsiElement callElement) {
-        String text = callElement.getText();
-        int dotIndex = text.indexOf(".");
-        int parenIndex = text.indexOf("(");
-        if (dotIndex >= 0 && parenIndex > dotIndex) {
-            return text.substring(dotIndex + 1, parenIndex).trim();
-        }
-        return null;
-    }
 
     private void processFunctionCall(PsiElement function,
                                      Set<FunctionContext> contexts,
@@ -517,48 +665,101 @@ public class PythonFunctionCallAnalyzer implements FunctionCallAnalyzer {
         return level / 4;
     }
     private String extractSourceText(PsiElement function) {
-        StringBuilder text = new StringBuilder();
+        Document document = PsiDocumentManager.getInstance(project)
+                .getDocument(function.getContainingFile());
+        if (document == null) return function.getText();
 
-        // 1. 获取完整的函数文本范围
-        PsiElement startElement = function;
-        while (startElement.getPrevSibling() != null &&
-                startElement.getPrevSibling().getText().trim().startsWith("@")) {
-            startElement = startElement.getPrevSibling();
+        // 1. 获取起始位置（包括装饰器）
+        PsiElement start = function;
+        while (start.getPrevSibling() != null &&
+                (start.getPrevSibling().getText().trim().startsWith("@") ||
+                        start.getPrevSibling().getText().trim().isEmpty())) {
+            start = start.getPrevSibling();
         }
 
-        // 2. 获取函数的起始和结束位置
-        int startOffset = startElement.getTextRange().getStartOffset();
-        int endOffset = findFunctionEndOffset(function);
+        // 2. 获取函数的基础缩进级别
+        int startLine = document.getLineNumber(start.getTextRange().getStartOffset());
+        String firstLine = document.getText(new TextRange(
+                document.getLineStartOffset(startLine),
+                document.getLineEndOffset(startLine)
+        ));
+        int baseIndent = getIndentLevel(firstLine);
 
-        // 3. 获取原始文本
-        String originalText = function.getContainingFile().getText()
-                .substring(startOffset, endOffset);
+        // 3. 查找函数结束位置
+        int currentLine = startLine + 1;
+        int endLine = currentLine;
+        int lineCount = document.getLineCount();
 
-        // 4. 保持原始缩进和格式
+        while (currentLine < lineCount) {
+            String line = document.getText(new TextRange(
+                    document.getLineStartOffset(currentLine),
+                    document.getLineEndOffset(currentLine)
+            ));
 
-        // 5. 处理注释
-        return config.isIncludeComments() ? originalText :
-                removePythonComments(originalText);
-    }
-
-    private int findFunctionEndOffset(PsiElement function) {
-        int baseIndent = getIndentationLevel(function.getText());
-        PsiElement current = function.getNextSibling();
-
-        while (current != null) {
-            String text = current.getText();
-            if (!text.trim().isEmpty()) {
-                int currentIndent = getIndentationLevel(text);
-                if (currentIndent <= baseIndent) {
+            if (!line.trim().isEmpty()) {
+                int indent = getIndentLevel(line);
+                if (indent <= baseIndent && !line.trim().startsWith("@")) {
                     break;
                 }
             }
-            current = current.getNextSibling();
+            endLine = currentLine;
+            currentLine++;
         }
 
-        return current != null ?
-                current.getTextRange().getStartOffset() :
-                function.getTextRange().getEndOffset();
+        // 4. 获取完整的函数文本
+        int startOffset = start.getTextRange().getStartOffset();
+        int endOffset = endLine < lineCount - 1 ?
+                document.getLineStartOffset(endLine + 1) :
+                document.getTextLength();
+
+        String completeText = document.getText(new TextRange(startOffset, endOffset));
+
+        // 5. 根据配置处理注释
+        return config.isIncludeComments() ?
+                completeText :
+                removePythonComments(completeText);
+    }
+
+    private int getIndentLevel(String line) {
+        int indent = 0;
+        for (char c : line.toCharArray()) {
+            if (c == ' ') {
+                indent++;
+            } else if (c == '\t') {
+                indent += 4;
+            } else {
+                break;
+            }
+        }
+        return indent;
+    }
+
+    private int findFunctionEndOffset(PsiElement function, Document document) {
+        int startLine = document.getLineNumber(function.getTextRange().getStartOffset());
+        int baseIndent = getIndentLevel(document.getText(new TextRange(
+                document.getLineStartOffset(startLine),
+                document.getLineEndOffset(startLine)
+        )));
+
+        int currentLine = startLine + 1;
+        int lineCount = document.getLineCount();
+
+        while (currentLine < lineCount) {
+            String line = document.getText(new TextRange(
+                    document.getLineStartOffset(currentLine),
+                    document.getLineEndOffset(currentLine)
+            ));
+
+            if (!line.trim().isEmpty()) {
+                int indent = getIndentLevel(line);
+                if (indent <= baseIndent) {
+                    return document.getLineStartOffset(currentLine);
+                }
+            }
+            currentLine++;
+        }
+
+        return document.getTextLength();
     }
 
 
