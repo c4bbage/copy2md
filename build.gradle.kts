@@ -4,25 +4,26 @@ plugins {
     id("org.jetbrains.intellij") version "1.17.3"
 }
 
-group = "com.bf"
-version = "1.2.5"
+group = "com.dobest1.copy2md"
+version = "1.2"
 
 repositories {
     mavenCentral()
 }
 
+dependencies {
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.8.1")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.8.1")
+}
+
 // Configure Gradle IntelliJ Plugin
-// Read more: https://plugins.jetbrains.com/docs/intellij/tools-gradle-intellij-plugin.html
 intellij {
     version.set("2023.2.6")
     type.set("IC") // Target IDE Platform
-    //plugins.set(listOf(/* Plugin Dependencies */))
-    //plugins.set(listOf("com.intellij.java"))
     plugins.set(listOf(
         "com.intellij.java"
     ))
 }
-
 
 sourceSets {
     main {
@@ -30,6 +31,7 @@ sourceSets {
         kotlin.srcDirs("src/main/kotlin")
     }
 }
+
 tasks {
     // Set the JVM compatibility versions
     withType<JavaCompile> {
@@ -54,8 +56,22 @@ tasks {
     publishPlugin {
         token.set(System.getenv("PUBLISH_TOKEN"))
     }
+
     buildPlugin {
         dependsOn("classes")
         from(sourceSets.main.get().output)
     }
+
+    buildSearchableOptions {
+        enabled = false
+    }
+    
+    test {
+        useJUnitPlatform()
+    }
+}
+
+tasks.wrapper {
+    gradleVersion = "8.5"
+    distributionType = Wrapper.DistributionType.ALL
 }
