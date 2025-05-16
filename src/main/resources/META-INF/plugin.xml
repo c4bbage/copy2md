@@ -114,6 +114,7 @@
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
             <add-to-group group-id="EditorTabPopupMenu" anchor="last"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="alt shift M"/>
         </action>
 
         <action id="CopyFunction" 

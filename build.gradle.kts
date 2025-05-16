@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.dobest1.copy2md"
-version = "1.2"
+version = "1.3"
 
 repositories {
     mavenCentral()
@@ -44,7 +44,7 @@ tasks {
 
     patchPluginXml {
         sinceBuild.set("232")
-        untilBuild.set("243.*")
+        untilBuild.set("251.*")
     }
 
     signPlugin {
