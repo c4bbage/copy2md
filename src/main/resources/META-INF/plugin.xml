@@ -117,12 +117,12 @@
             <keyboard-shortcut keymap="$default" first-keystroke="alt shift M"/>
         </action>
 
-        <action id="CopyFunction" 
+        <!-- <action id="CopyFunction" 
                 class="com.bf.copy2md.action.CopyFunctionAction"
                 text="Copy Function → Markdown(Beta)"
                 description="Copy function with its dependencies">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             <keyboard-shortcut keymap="$default" first-keystroke="alt shift D"/>
-        </action>
+        </action> -->
     </actions>
 </idea-plugin>
