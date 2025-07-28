@@ -10,21 +10,21 @@
 
         <h3>Key Features</h3>
 
-        <h4>1. Copy Table as Markdown</h4>
+        <h4>1. Copy Tabs → Markdown</h4>
         <ul>
-            <li><b>Usage:</b> Select table content in editor → Right-click → Copy Table as Markdown</li>
+            <li><b>Usage:</b> Press Alt+Shift+T or right-click → Copy Tabs → Markdown</li>
             <li><b>Features:</b>
                 <ul>
-                    <li>Converts selected text to markdown table format</li>
-                    <li>Automatically aligns columns</li>
-                    <li>Preserves table structure</li>
+                    <li>Copies all currently opened editor tabs</li>
+                    <li>Includes project name as header</li>
+                    <li>Each file formatted with proper markdown syntax</li>
                 </ul>
             </li>
         </ul>
 
-        <h4>2. Copy Code as Markdown</h4>
+        <h4>2. Copy Selection → Markdown</h4>
         <ul>
-            <li><b>Usage:</b> Select code in editor → Right-click → Copy Code as Markdown</li>
+            <li><b>Usage:</b> Select code in editor → Right-click → Copy Selection → Markdown</li>
             <li><b>Features:</b>
                 <ul>
                     <li>Copies selected code with markdown code block formatting</li>
@@ -34,13 +34,13 @@
             </li>
         </ul>
 
-        <h4>3. Copy File as Markdown</h4>
+        <h4>3. Copy File → Markdown</h4>
         <ul>
             <li><b>Usage:</b>
                 <ul>
-                    <li>Project View: Right-click on file(s) → Copy as Markdown</li>
-                    <li>Editor: Right-click in editor → Copy as Markdown</li>
-                    <li>Editor Tab: Right-click on tab → Copy as Markdown</li>
+                    <li>Project View: Right-click on file(s) → Copy File → Markdown</li>
+                    <li>Editor: Right-click in editor → Copy File → Markdown</li>
+                    <li>Editor Tab: Right-click on tab → Copy File → Markdown</li>
                 </ul>
             </li>
             <li><b>Features:</b>
@@ -52,16 +52,23 @@
             </li>
         </ul>
 
-        <h4>4. Copy Function as Markdown（Beta）</h4>
+        <h4>4. Toggle Word Wrap</h4>
         <ul>
-            <li><b>Usage:</b> Right-click on function/method → Copy Function as Markdown</li>
+            <li><b>Usage:</b> Press Alt+Z in editor to toggle word wrap</li>
             <li><b>Features:</b>
                 <ul>
-                    <li>Extracts complete function/method definition</li>
-                    <li>Supports multiple programming languages (Java, Python, Go, etc.)</li>
-                    <li>Maintains code structure and formatting</li>
+                    <li>Toggle soft word wrapping on/off</li>
+                    <li>Works like VS Code's Alt+Z shortcut</li>
+                    <li>Shows status notification when toggled</li>
                 </ul>
             </li>
+        </ul>
+
+        <h3>Keyboard Shortcuts</h3>
+        <ul>
+            <li><b>Alt+Shift+T:</b> Copy Tabs → Markdown</li>
+            <li><b>Alt+Shift+M:</b> Copy File → Markdown</li>
+            <li><b>Alt+Z:</b> Toggle Word Wrap</li>
         </ul>
 
         <h3>Supported Languages</h3>
@@ -69,6 +76,7 @@
             <li>Java</li>
             <li>Python</li>
             <li>Go</li>
+            <li>JavaScript/TypeScript</li>
             <li>And more...</li>
         </ul>
 
@@ -78,6 +86,7 @@
             <li>Sharing code snippets</li>
             <li>Writing technical articles or tutorials</li>
             <li>Taking programming notes</li>
+            <li>Quick code formatting for markdown files</li>
         </ul>
     ]]></description>
 
@@ -85,31 +94,31 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <notificationGroup id="Copy2MD Notification Group"
-                         displayType="BALLOON"
-                         toolWindowId="Copy2MD"
-                         isLogByDefault="false"/>
+                           displayType="BALLOON"
+                           toolWindowId="Copy2MD"
+                           isLogByDefault="false"/>
     </extensions>
 
     <actions>
-        <action id="CopyAllOpenedTabsAsMarkdown" 
-            class="com.bf.copy2md.action.CopyAllOpenedTabsAsMarkdownAction"
-            text="Copy Tabs → Markdown" 
-            description="Copy all opened tabs as markdown">
+        <action id="CopyAllOpenedTabsAsMarkdown"
+                class="com.bf.copy2md.action.CopyAllOpenedTabsAsMarkdownAction"
+                text="Copy Tabs → Markdown"
+                description="Copy all opened tabs as markdown">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
             <keyboard-shortcut keymap="$default" first-keystroke="alt shift T"/>
         </action>
 
-        <action id="CopyCodeAsMarkdown" 
+        <action id="CopyCodeAsMarkdown"
                 class="com.bf.copy2md.action.CopyCodeAsMarkdownAction"
-                text="Copy Selection → Markdown" 
+                text="Copy Selection → Markdown"
                 description="Copy selected code as markdown">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
-        
-        <action id="CopyFileAsMarkdown" 
+
+        <action id="CopyFileAsMarkdown"
                 class="com.bf.copy2md.action.CopyFileAsMarkdownAction"
-                text="Copy File → Markdown" 
+                text="Copy File → Markdown"
                 description="Copy current file as markdown">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
@@ -117,7 +126,15 @@
             <keyboard-shortcut keymap="$default" first-keystroke="alt shift M"/>
         </action>
 
-        <!-- <action id="CopyFunction" 
+        <action id="ToggleWordWrap"
+                class="com.bf.copy2md.action.ToggleWordWrapAction"
+                text="Toggle Word Wrap"
+                description="Toggle word wrap in active editor (like VS Code Alt+Z)">
+            <add-to-group group-id="ViewMenu" anchor="last"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="alt Z"/>
+        </action>
+
+        <!-- <action id="CopyFunction"
                 class="com.bf.copy2md.action.CopyFunctionAction"
                 text="Copy Function → Markdown(Beta)"
                 description="Copy function with its dependencies">

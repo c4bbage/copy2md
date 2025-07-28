@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.dobest1.copy2md"
-version = "1.3"
+version = "1.4"
 
 repositories {
     mavenCentral()
